@@ -9,33 +9,23 @@ if __name__ == "__main__":
     # test_data = sdr.fit_transform(test_data.values.T).T
     test_data = load_pickle("real_test_data_no_label")
     ctx = mx.cpu()
-    test_data = nd.array(test_data, ctx=ctx).reshape((test_data.shape[0], 1, 1, -1))
+    test_data = nd.array(test_data, ctx=ctx).reshape((test_data.shape[0], 1, -1))
     # save_pickle(test_data, "real_test_data_no_label")
 
-    test_dataList = [test_data[:20000,:,:,:],test_data[20000:40000,:,:,:],test_data[40000:60000,:,:,:]
-            ,test_data[60000:80000,:,:,:],test_data[80000:,:,:,:]]
+    test_dataList = [test_data[:20000,:,:],test_data[20000:40000,:,:],test_data[40000:60000,:,:]
+            ,test_data[60000:80000,:,:],test_data[80000:,:,:]]
 
-
+    numOfNet = 7
     # loading the net
     netList = []
-    for itr in range(4):
+    for itr in range(numOfNet):
         net = load_pickle("./net/net" + str(itr))
-        # generate a new Net
-        net2 = genNet()
-        net2.initialize(ctx=mx.cpu())
-
-        net2ParaList = net2.collect_params()
-        netParaList = net.collect_params()
-        ParaList = list(zip(net2ParaList.keys(), netParaList.keys()))
-        for para in ParaList:
-            net2Para, netPara = para
-            net2ParaList[net2Para].set_data(
-                netParaList[netPara].data().as_in_context(mx.cpu())
-            )
-        netList.append(net2)
+        net.collect_params().reset_ctx(mx.cpu())
+        netList.append(net)
 
     for itr , test_data in enumerate(test_dataList):
         resultList = np.zeros(shape=(test_data.shape[0], 0))
+        print(test_data.shape[0])
         for net in netList:
             output = net(test_data)
             output = output.argmax(axis=1).asnumpy()
@@ -46,16 +36,17 @@ if __name__ == "__main__":
         gc.collect()
 
 
-    for itrr, test_data in enumerate(test_dataList):
-        for itr, net in enumerate(netList):
-            temp = test_data
-            for i in range(9):
-                temp = net[i](temp)
-            save_pickle(temp, str(itrr)+"real_test_middle_result" + str(itr) + ".dta")
-            print(str(itrr)+"real_test_middle_result" + str(itr) + ".dta is done")
-
-
-
-
-
+    realTestResult = []
+    for i in range(5):
+        realTestResult.append(load_pickle("realTest_resultList"+str(i)+".dta"))
+    result  = np.vstack(realTestResult)
+    def findMostFreq(x):
+        return np.bincount(x).argmax()
+    voteMethod = np.apply_along_axis(findMostFreq,1,result.astype(int))
+    test = pd.read_csv(".\\data\\first_test_index_20180131.csv")
+    test['predict'] = voteMethod
+    di  = {2:"star",1:"qso",3:"unknown",0:"galaxy"}
+    test['predicted class'] = test['predict'].map(di)
+    test = test.rename(columns={"id":"key"})
+    test[['key','predicted class']].to_csv("result2_19.csv",index = False)
 
