@@ -6,7 +6,7 @@ from sklearn.preprocessing import OneHotEncoder,LabelEncoder,StandardScaler
 from sklearn import metrics
 from collections import Counter
 from imblearn.over_sampling import SMOTE
-from imblearn.under_sampling import  ClusterCentroids, NearMiss,RandomUnderSampler
+from imblearn.under_sampling import ClusterCentroids, NearMiss,RandomUnderSampler
 import gc
 from mxnet import gluon
 from mxnet import autograd
@@ -37,8 +37,6 @@ def read_data(index,path , useDF = True):
     end = datetime.datetime.now()
     print(end - start)
     return  data
-
-
 
 def accuracy(output, label):
     return nd.sum(output.argmax(axis=1)==label).asscalar()
@@ -93,8 +91,6 @@ def genNet(paras = [1,20,50]):
     return net
 
 
-
-
 class OneDimensionConv(nn.Block):
     def __init__(self,out_layer = 3,input_layer = 1,kernel_size = 100,**kwargs):
 
@@ -121,3 +117,71 @@ class OneDimensionMaxPool(nn.Block):
         conv = nd.Pooling(data=x, pool_type="max", kernel=(1,self.kernel_size),stride=(1,self.kernel_size))
         #conv = nd.Pooling(data=x, pool_type="max", kernel=(1, self.kernel_size))
         return nd.relu(conv)
+
+class Residual(nn.Block):
+    def __init__(self, channels, same_shape=True, **kwargs):
+        super(Residual, self).__init__(**kwargs)
+        self.same_shape = same_shape
+        strides = 1 if same_shape else 2
+        self.conv1 = nn.Conv1D(channels, kernel_size=3, padding=1,
+                               strides=strides)
+        self.bn1 = nn.BatchNorm()
+        self.conv2 = nn.Conv1D(channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm()
+        if not same_shape:
+            self.conv3 = nn.Conv1D(channels, kernel_size=1,
+                                   strides=strides)
+
+    def forward(self,x):
+        out = nd.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        if not self.same_shape:
+            x = self.conv3(x)
+        return nd.relu(out + x)
+
+class ResNet(nn.Block):
+    def __init__(self, num_classes, verbose=False, **kwargs):
+        super(ResNet, self).__init__(**kwargs)
+        self.verbose = verbose
+        # add name_scope on the outermost Sequential
+        with self.name_scope():
+            # block 1
+            # batch x 10 x 1297
+            b1 = nn.Conv1D(10, kernel_size=3, strides=2)
+            # block 2
+            b2 = nn.Sequential()
+            b2.add(
+                nn.MaxPool1D(pool_size=3, strides=2),
+                Residual(20, same_shape=False),
+                Residual(20),
+                Residual(20),
+
+            )
+            b3 = nn.Sequential()
+            b3.add(
+                nn.MaxPool1D(pool_size=3, strides=2),
+                Residual(40, same_shape=False),
+                Residual(40),
+            )
+            b3.add(
+                nn.MaxPool1D(pool_size=3, strides=2),
+                Residual(60, same_shape=False),
+                Residual(60),
+            )
+            b4 = nn.Sequential()
+            b4.add(
+                nn.AvgPool1D(pool_size=3),
+                nn.Dropout(.5),
+                nn.Dense(num_classes)
+            )
+            # chain all blocks together
+            self.net = nn.Sequential()
+            self.net.add(b1, b2, b3, b4)
+
+    def forward(self, x):
+        out = x
+        for i, b in enumerate(self.net):
+            out = b(out)
+            if self.verbose:
+                print('Block %d output: %s' % (i + 1, out.shape))
+        return out

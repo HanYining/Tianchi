@@ -61,7 +61,7 @@ if __name__ == "__main__":
     os.chdir("C:\\Users\\an\\Documents\\competition\\LAMOST")
     data = pd.read_csv(".\\data\\first_train_index_20180131.csv")
 
-    IndexList,testList = stratifiedSplit(data,key='type',frac = np.array([0.1]*5))
+    IndexList,testList = stratifiedSplit(data,key='type',frac = np.array([0.1]*8))
 
     for i,index in enumerate(IndexList):
         train_data = read_data(index.id.values,".\\data\\first_train_data_20180131")
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         save_pickle(train_data,"train_data"+str(i))
         save_pickle(train_label,"train_label"+str(i))
 
-    testList = testList.sample(frac=0.1)
+    testList = testList.sample(frac=0.5)
     test_data = read_data(testList.id.values, ".\\data\\first_train_data_20180131")
     test_label = testList.type.values
 
